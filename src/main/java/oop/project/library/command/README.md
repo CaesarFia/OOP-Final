@@ -2,39 +2,24 @@
 
 Handles creation of command structures and multi-argument parsing.
 
-## commands
-
-- mul: two positional ints
-- div: two named doubles (--left, --right)
-- echo: one optional string, default exists
-
-- search: string + optional bool flag
-- dispatch: subcommand then value
-
-## notes
-
-using Basicargs from input package to hold parsed stuff
-argument system handles the actual parsing, we just use the result
-
 ## Development Notes
 
-for mul i just split on whitespace and parsed each token as int. pretty straightforward since its positional. for div i looped through tokens looking for --left and --right flags which is basically how argparse does it. tried to guard against negative numbers being confused with flags but the check only works for integers, so negative decimals might be an issue (will fix later).
+- Commands are built from typed parameters that can be positional, named, or both.
+- Parsing resolves named arguments first and then consumes remaining positionals in declaration order, which keeps mixed commands predictable.
+- `ParsedArguments` exposes typed getters so downstream code does not have to cast values out of a raw `Map<String, Object>`.
 
 ## PoC Design Analysis
 
 ### Individual Review (Command Lead)
-
-good decisions:
-- splitting positional vs named arg handling early. mul and div feel pretty different so treating them differently makes sense, didnt try to force one solution for both
-- throwing RuntimeException with a message for bad input instead of returning null or something, makes it easier to see whats wrong
-
-less good:
-- the negative number check in div is kind of hacky, using Integer.parseInt just to validate that a value isnt a flag is not great. probably a cleaner way to do this
-- a lot of repeated code between --left and --right parsing in div, should probably be a helper at some point
-
-upcoming:
-- still need echo, search, dispatch for mvp. echo seems simple, dispatch will be more complex since it has subcommands
+- Good: One parameter can be both positional and named, which handled cases like `echo --message value` without duplicating command logic.
+- Good: Extraneous positional and unknown named arguments are rejected centrally instead of in each scenario.
+- Less-good: Repeated arguments and list-valued arguments are not supported yet, so future variadic features will need an API extension.
+- Less-good: `dispatch` still uses scenario-side logic for its type-dependent second argument because subcommands are out of scope for this checkpoint.
 
 ### Individual Review (Argument Lead)
+- Good: The typed getter API (`getInt`, `getString`, etc.) makes the command results safer to consume in normal Java code.
+- Less-good: Default handling is currently value-based only; lazy defaults or derived defaults may be needed later.
 
 ### Team Review
+- We still need to decide whether future defaults and subcommands belong directly in `Command` or in a higher-level builder abstraction.
+- Alias handling is sufficient for checkpoint 2, but we have not finalized how it should interact with richer future command trees.

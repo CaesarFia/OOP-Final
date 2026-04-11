@@ -6,13 +6,13 @@ import java.util.Scanner;
 
 public final class Main {
 
-    static void main() {
+    public static void main(String[] args) {
         var scanner = new Scanner(System.in);
         while (true) {
             var input = scanner.nextLine();
             try {
-                var args = Scenarios.parse(input);
-                System.out.println(args);
+                var parsedArgs = Scenarios.parse(input);
+                System.out.println(parsedArgs);
             } catch (Throwable t) {
                 System.out.println("Unexpected " + t.getClass().getSimpleName() + ": " + t.getMessage());
                 t.printStackTrace();

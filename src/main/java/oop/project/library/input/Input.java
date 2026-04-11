@@ -1,7 +1,9 @@
 package oop.project.library.input;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public final class Input {
@@ -21,7 +23,7 @@ public final class Input {
     }
 
     public BasicArgs parseBasicArgs() {
-        var args = new BasicArgs(new ArrayList<>(), new HashMap<>());
+        var args = new BasicArgs(new ArrayList<>(), new LinkedHashMap<>());
         while (true) {
             switch (parseValue().orElse(null)) {
                 case null -> { return args; }
@@ -32,7 +34,9 @@ public final class Input {
                     switch (parseValue().orElse(null)) {
                         case Value.Literal(String value) -> args.named().put(name, value);
                         case Value.QuotedString(String value) -> args.named().put(name, value);
-                        case null, default -> throw new RuntimeException("Double flag --" + name + " is missing a value @ index " + index + ".");
+                        case null, default -> throw new RuntimeException(
+                            "Double flag --" + name + " is missing a value @ index " + index + "."
+                        );
                     }
                 }
             }
@@ -40,32 +44,66 @@ public final class Input {
     }
 
     public Optional<Value> parseValue() {
-        while (index < chars.length && chars[index] == ' ') { index++; }
+        while (index < chars.length && chars[index] == ' ') {
+            index++;
+        }
+
         if (index >= chars.length) {
             return Optional.empty();
-        } else if (chars[index] == '"') {
-            var start = index;
-            do { index++; } while (index < chars.length && chars[index] != '"');
-            if (index >= chars.length) {
-                throw new RuntimeException("Unterminated quoted string @ index " + start + ".");
-            }
-            var value = new String(chars, start + 1, index - start - 1);
-            return Optional.of(new Value.QuotedString(value));
-        } else {
-            var start = index;
-            do { index++; } while (index < chars.length && chars[index] != ' ' && chars[index] != '"');
-            if (index < chars.length && chars[index] == '"') {
-                throw new RuntimeException("Invalid quote within literal @ index " + index + ".");
-            }
-            var value = new String(chars, start, index - start);
-            if (value.startsWith("-") && value.length() > 1 && Character.isLetter(value.charAt(1))) {
-                return Optional.of(new Value.SingleFlag(value.substring(1)));
-            } else if (value.startsWith("--") && value.length() > 2 && Character.isLetter(value.charAt(2))) {
-                return Optional.of(new Value.DoubleFlag(value.substring(2)));
-            } else {
-                return Optional.of(new Value.Literal(value));
-            }
         }
+
+        if (chars[index] == '"') {
+            return parseQuotedString();
+        }
+
+        return parseLiteralOrFlag();
     }
 
+    public int checkpoint() {
+        return index;
+    }
+
+    public void restore(int checkpoint) {
+        index = checkpoint;
+    }
+
+    private Optional<Value> parseQuotedString() {
+        var start = index;
+        do {
+            index++;
+        } while (index < chars.length && chars[index] != '"');
+
+        if (index >= chars.length) {
+            throw new RuntimeException("Unterminated quoted string @ index " + start + ".");
+        }
+
+        var value = new String(chars, start + 1, index - start - 1);
+        index++;
+
+        if (index < chars.length && chars[index] != ' ') {
+            throw new RuntimeException("Invalid quote within literal @ index " + index + ".");
+        }
+
+        return Optional.of(new Value.QuotedString(value));
+    }
+
+    private Optional<Value> parseLiteralOrFlag() {
+        var start = index;
+        do {
+            index++;
+        } while (index < chars.length && chars[index] != ' ' && chars[index] != '"');
+
+        if (index < chars.length && chars[index] == '"') {
+            throw new RuntimeException("Invalid quote within literal @ index " + index + ".");
+        }
+
+        var value = new String(chars, start, index - start);
+        if (value.startsWith("--") && value.length() > 2 && Character.isLetter(value.charAt(2))) {
+            return Optional.of(new Value.DoubleFlag(value.substring(2)));
+        }
+        if (value.startsWith("-") && value.length() > 1 && Character.isLetter(value.charAt(1))) {
+            return Optional.of(new Value.SingleFlag(value.substring(1)));
+        }
+        return Optional.of(new Value.Literal(value));
+    }
 }
