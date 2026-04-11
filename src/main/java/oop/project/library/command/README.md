@@ -1,6 +1,19 @@
-# Argument System
+# Command System
 
-Handles creation of creation command structures and multi-argument parsing.
+Handles creation of command structures and multi-argument parsing.
+
+## commands
+
+- mul: two positional ints
+- div: two named doubles (--left, --right)
+- echo: one optional string, default exists
+- search: string + optional bool flag
+- dispatch: subcommand then value
+
+## notes
+
+using BasicArgs from input package to hold parsed stuff
+argument system handles the actual parsing, we just use the result
 
 ## Development Notes
 
