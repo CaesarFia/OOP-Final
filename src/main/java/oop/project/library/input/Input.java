@@ -23,30 +23,20 @@ public final class Input {
     }
 
     public BasicArgs parseBasicArgs() {
-        var positional = new ArrayList<String>();
-        var named = new LinkedHashMap<String, String>();
-
+        var args = new BasicArgs(new ArrayList<>(), new LinkedHashMap<>());
         while (true) {
             switch (parseValue().orElse(null)) {
-                case null -> {
-                    return new BasicArgs(List.copyOf(positional), Map.copyOf(named));
-                }
-                case Value.Literal(String value) -> positional.add(value);
-                case Value.QuotedString(String value) -> positional.add(value);
-                case Value.SingleFlag(String name) -> putNamed(named, name, "");
+                case null -> { return args; }
+                case Value.Literal(String value) -> args.positional().add(value);
+                case Value.QuotedString(String value) -> args.positional().add(value);
+                case Value.SingleFlag(String name) -> args.named().put(name, "");
                 case Value.DoubleFlag(String name) -> {
-                    var checkpoint = index;
                     switch (parseValue().orElse(null)) {
-                        case Value.Literal(String value) -> putNamed(named, name, value);
-                        case Value.QuotedString(String value) -> putNamed(named, name, value);
-                        case null -> {
-                            index = checkpoint;
-                            putNamed(named, name, "");
-                        }
-                        default -> {
-                            index = checkpoint;
-                            putNamed(named, name, "");
-                        }
+                        case Value.Literal(String value) -> args.named().put(name, value);
+                        case Value.QuotedString(String value) -> args.named().put(name, value);
+                        case null, default -> throw new RuntimeException(
+                            "Double flag --" + name + " is missing a value @ index " + index + "."
+                        );
                     }
                 }
             }
@@ -116,11 +106,4 @@ public final class Input {
         }
         return Optional.of(new Value.Literal(value));
     }
-
-    private static void putNamed(Map<String, String> named, String name, String value) {
-        if (named.putIfAbsent(name, value) != null) {
-            throw new RuntimeException("Duplicate named argument " + name + ".");
-        }
-    }
-
 }
