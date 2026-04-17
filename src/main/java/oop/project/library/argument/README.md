@@ -6,20 +6,22 @@ Handles parsing a single String input value into typed data.
 
 - Centralized parsing into `ArgumentType<T>` so type conversion and validation can be reused by both positional and named command arguments.
 - Added validator hooks instead of hard-coding range and choice checks into each scenario.
-- Implemented custom types through `ArgumentType.custom(...)`, which lets types like `LocalDate` plug into the same path as the built-in primitives.
+- Kept validation attached to the type abstraction so a validated type can be reused in multiple commands without duplicating rules.
+- Added enum and regex support as general-purpose features rather than solving those cases in scenario code.
+- Kept `ArgumentException` separate from command-level errors so invalid value parsing and invalid command structure remain different failure modes.
 
 ## PoC Design Analysis
 
 ### Individual Review (Argument Lead)
-- Good: Built-in types and custom types share the same API, so the date scenario no longer needs a one-off parsing branch.
-- Good: Validation composes with parsing cleanly, which kept `fizzbuzz` and `difficulty` short and readable.
-- Less-good: Validator helpers currently cover checkpoint use cases only; enum and regex helpers still need to be added.
-- Less-good: Error messages are aimed more at debugging than polished CLI UX.
+- Good: Using one polymorphic `ArgumentType<T>` abstraction for built-in, custom, and enum-backed parsing avoids hardcoding scenario-specific data types into the library.
+- Good: Treating validation as a composable decorator on top of parsing makes range, choice, and regex checks reusable across multiple commands.
+- Bad: Validation currently lives on the same abstraction as parsing, which keeps the API small but also couples two responsibilities that could grow at different rates.
+- Bad: The library exposes typed parsing well, but it still has limited metadata around each argument type, which would make future help text or richer diagnostics harder to add cleanly.
 
 ### Individual Review (Command Lead)
-- Good: The argument package stays decoupled from command structure, which made it easy to test parsing and validation logic independently.
-- Less-good: Argument definitions do not yet include help text or richer metadata that would matter for usage generation later.
+- Good: The command system depends on `ArgumentType<T>` through a narrow parsing/validation contract instead of knowing details about specific value types.
+- Bad: Alias-preserving output in parsed command results means the command layer now has some presentation concerns that partially leak into how argument names appear externally.
 
 ### Team Review
-- We agree on keeping parsing and validation separate concerns, but we still need to decide whether later constraints should remain on `ArgumentType<T>` or move into their own layer.
-- Enum support and regex validation should fit the current shape, but the final public API for those additions is still open.
+- Current design disagreement: We do not fully agree on whether validation belongs directly on `ArgumentType<T>` or should move into a separate validator object/layer once the library grows further.
+- Current agreed concern: Custom parsing is flexible enough for the MVP, but we do not yet have a strong design for richer error reporting that distinguishes parse failure, validation failure, and usage hints cleanly.

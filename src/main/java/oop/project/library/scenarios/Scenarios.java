@@ -7,7 +7,7 @@ import java.util.Map;
 public final class Scenarios {
 
     public static Map<String, Object> parse(String command) {
-        // Hacky extraction of base command, but necessary without subcommands.
+        // Extract the top-level command name, leaving the remaining input unchanged for the scenario.
         var index = command.indexOf(" ");
         var base = index != -1 ? command.substring(0, index) : command;
         var arguments = index != -1 ? " ".repeat(base.length()) + command.substring(index) : ""; //maintain index
