@@ -6,10 +6,25 @@ import java.util.Map;
 
 public final class ParsedArguments {
 
-    private final Map<String, Object> values;
+    private final Map<String, Object> canonicalValues;
+    private final Map<String, Object> displayValues;
+    private final String subcommandName;
+    private final ParsedArguments subcommandArguments;
 
-    ParsedArguments(Map<String, Object> values) {
-        this.values = Collections.unmodifiableMap(new LinkedHashMap<>(values));
+    ParsedArguments(Map<String, Object> canonicalValues, Map<String, Object> displayValues) {
+        this(canonicalValues, displayValues, null, null);
+    }
+
+    ParsedArguments(
+        Map<String, Object> canonicalValues,
+        Map<String, Object> displayValues,
+        String subcommandName,
+        ParsedArguments subcommandArguments
+    ) {
+        this.canonicalValues = Collections.unmodifiableMap(new LinkedHashMap<>(canonicalValues));
+        this.displayValues = Collections.unmodifiableMap(new LinkedHashMap<>(displayValues));
+        this.subcommandName = subcommandName;
+        this.subcommandArguments = subcommandArguments;
     }
 
     public int getInt(String name) throws CommandException {
@@ -29,7 +44,7 @@ public final class ParsedArguments {
     }
 
     public <T> T get(String name, Class<T> expectedType) throws CommandException {
-        var value = values.get(name);
+        var value = canonicalValues.get(name);
         if (value == null) {
             throw new CommandException("No parsed value exists for '" + name + "'.");
         }
@@ -43,7 +58,25 @@ public final class ParsedArguments {
     }
 
     public Map<String, Object> toMap() {
-        return values;
+        return displayValues;
+    }
+
+    public boolean hasSubcommand() {
+        return subcommandName != null;
+    }
+
+    public String getSubcommandName() throws CommandException {
+        if (subcommandName == null) {
+            throw new CommandException("No parsed subcommand exists.");
+        }
+        return subcommandName;
+    }
+
+    public ParsedArguments getSubcommandArguments() throws CommandException {
+        if (subcommandArguments == null) {
+            throw new CommandException("No parsed subcommand arguments exist.");
+        }
+        return subcommandArguments;
     }
 
 }

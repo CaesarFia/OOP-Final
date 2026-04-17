@@ -6,10 +6,16 @@ import oop.project.library.command.Command;
 import oop.project.library.command.CommandException;
 
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Map;
 
 public final class ArgumentScenarios {
+
+    private enum Difficulty {
+        PEACEFUL,
+        EASY,
+        NORMAL,
+        HARD
+    }
 
     private static final Command ADD = Command.builder("add")
         .addParameter("left", ArgumentType.integer()).positional().add()
@@ -26,10 +32,7 @@ public final class ArgumentScenarios {
         .build();
 
     private static final Command DIFFICULTY = Command.builder("difficulty")
-        .addParameter(
-            "difficulty",
-            ArgumentType.string().validate(Validators.choices(List.of("peaceful", "easy", "normal", "hard")))
-        ).positional().add()
+        .addParameter("difficulty", ArgumentType.enumeration(Difficulty.class)).positional().add()
         .build();
 
     private static final Command DATE = Command.builder("date")
@@ -37,30 +40,54 @@ public final class ArgumentScenarios {
         .build();
 
     public static Map<String, Object> add(String arguments) throws RuntimeException {
-        return parseScenario(ADD, arguments);
+        try {
+            var parsed = ADD.parse(arguments);
+            return Map.of(
+                "left", parsed.getInt("left"),
+                "right", parsed.getInt("right")
+            );
+        } catch (CommandException e) {
+            throw new RuntimeException("Invalid add command.", e);
+        }
     }
 
     public static Map<String, Object> sub(String arguments) throws RuntimeException {
-        return parseScenario(SUB, arguments);
+        try {
+            var parsed = SUB.parse(arguments);
+            return Map.of(
+                "left", parsed.getDouble("left"),
+                "right", parsed.getDouble("right")
+            );
+        } catch (CommandException e) {
+            throw new RuntimeException("Invalid sub command.", e);
+        }
     }
 
     public static Map<String, Object> fizzbuzz(String arguments) throws RuntimeException {
-        return parseScenario(FIZZBUZZ, arguments);
+        try {
+            var parsed = FIZZBUZZ.parse(arguments);
+            return Map.of("number", parsed.getInt("number"));
+        } catch (CommandException e) {
+            throw new RuntimeException("Invalid fizzbuzz command.", e);
+        }
     }
 
     public static Map<String, Object> difficulty(String arguments) throws RuntimeException {
-        return parseScenario(DIFFICULTY, arguments);
+        try {
+            var parsed = DIFFICULTY.parse(arguments);
+            var difficulty = parsed.get("difficulty", Difficulty.class);
+            return Map.of("difficulty", difficulty.name().toLowerCase());
+        } catch (CommandException e) {
+            throw new RuntimeException("Invalid difficulty command.", e);
+        }
     }
 
     public static Map<String, Object> date(String arguments) throws RuntimeException {
-        return parseScenario(DATE, arguments);
-    }
-
-    private static Map<String, Object> parseScenario(Command command, String arguments) {
         try {
-            return command.parse(arguments).toMap();
+            var parsed = DATE.parse(arguments);
+            return Map.of("date", parsed.get("date", LocalDate.class));
         } catch (CommandException e) {
-            throw new RuntimeException("Invalid " + command.name() + " command.", e);
+            throw new RuntimeException("Invalid date command.", e);
         }
     }
 

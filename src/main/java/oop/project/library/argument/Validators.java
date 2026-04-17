@@ -2,6 +2,7 @@ package oop.project.library.argument;
 
 import java.util.Collection;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class Validators {
 
@@ -33,6 +34,17 @@ public final class Validators {
             if (!allowed.contains(value)) {
                 throw new ArgumentException(
                     "Argument '" + argumentName + "' must be one of " + allowed + "."
+                );
+            }
+        };
+    }
+
+    public static ArgumentType.Validator<String> regex(String regex) {
+        var pattern = Pattern.compile(regex);
+        return (argumentName, value) -> {
+            if (!pattern.matcher(value).matches()) {
+                throw new ArgumentException(
+                    "Argument '" + argumentName + "' must match regex '" + regex + "'."
                 );
             }
         };

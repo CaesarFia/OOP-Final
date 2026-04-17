@@ -3,6 +3,7 @@ package oop.project.library.argument;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.StringJoiner;
 
 public final class ArgumentType<T> {
 
@@ -19,13 +20,11 @@ public final class ArgumentType<T> {
     private final String description;
     private final Parser<T> parser;
     private final List<Validator<T>> validators;
-    private final boolean booleanType;
 
-    private ArgumentType(String description, Parser<T> parser, List<Validator<T>> validators, boolean booleanType) {
+    private ArgumentType(String description, Parser<T> parser, List<Validator<T>> validators) {
         this.description = description;
         this.parser = parser;
         this.validators = validators;
-        this.booleanType = booleanType;
     }
 
     public T parse(String argumentName, String rawValue) throws ArgumentException {
@@ -40,11 +39,7 @@ public final class ArgumentType<T> {
         Objects.requireNonNull(validator);
         var nextValidators = new ArrayList<>(validators);
         nextValidators.add(validator);
-        return new ArgumentType<>(description, parser, List.copyOf(nextValidators), booleanType);
-    }
-
-    public boolean isBooleanType() {
-        return booleanType;
+        return new ArgumentType<>(description, parser, List.copyOf(nextValidators));
     }
 
     public String description() {
@@ -58,7 +53,7 @@ public final class ArgumentType<T> {
                 case "false" -> false;
                 default -> throw new ArgumentException("Expected true or false but received '" + rawValue + "'.");
             };
-        }, List.of(), true);
+        }, List.of());
     }
 
     public static ArgumentType<Integer> integer() {
@@ -68,7 +63,7 @@ public final class ArgumentType<T> {
             } catch (NumberFormatException e) {
                 throw new ArgumentException("Expected an integer but received '" + rawValue + "'.", e);
             }
-        }, List.of(), false);
+        }, List.of());
     }
 
     public static ArgumentType<Double> dbl() {
@@ -78,11 +73,35 @@ public final class ArgumentType<T> {
             } catch (NumberFormatException e) {
                 throw new ArgumentException("Expected a double but received '" + rawValue + "'.", e);
             }
-        }, List.of(), false);
+        }, List.of());
     }
 
     public static ArgumentType<String> string() {
-        return new ArgumentType<>("string", rawValue -> rawValue, List.of(), false);
+        return new ArgumentType<>("string", rawValue -> rawValue, List.of());
+    }
+
+    public static <E extends Enum<E>> ArgumentType<E> enumeration(Class<E> enumType) {
+        Objects.requireNonNull(enumType);
+        var constants = enumType.getEnumConstants();
+        if (constants == null) {
+            throw new IllegalArgumentException(enumType.getName() + " is not an enum type.");
+        }
+
+        var allowedValues = new StringJoiner(", ");
+        for (var constant : constants) {
+            allowedValues.add(constant.name());
+        }
+
+        return new ArgumentType<>("enum " + enumType.getSimpleName(), rawValue -> {
+            for (var constant : constants) {
+                if (constant.name().equalsIgnoreCase(rawValue)) {
+                    return constant;
+                }
+            }
+            throw new ArgumentException(
+                "Expected one of [" + allowedValues + "] but received '" + rawValue + "'."
+            );
+        }, List.of());
     }
 
     public static <T> ArgumentType<T> custom(String description, Parser<T> parser) {
@@ -99,7 +118,7 @@ public final class ArgumentType<T> {
                     e
                 );
             }
-        }, List.of(), false);
+        }, List.of());
     }
 
 }

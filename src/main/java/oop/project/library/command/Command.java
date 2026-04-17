@@ -6,9 +6,11 @@ import oop.project.library.input.BasicArgs;
 import oop.project.library.input.Input;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -16,10 +18,12 @@ public final class Command {
 
     private final String name;
     private final List<Parameter<?>> parameters;
+    private final Map<String, Command> subcommands;
 
-    private Command(String name, List<Parameter<?>> parameters) {
+    private Command(String name, List<Parameter<?>> parameters, Map<String, Command> subcommands) {
         this.name = name;
         this.parameters = parameters;
+        this.subcommands = subcommands;
     }
 
     public String name() {
@@ -28,21 +32,30 @@ public final class Command {
 
     public ParsedArguments parse(String input) throws CommandException {
         try {
-            return parse(tokenize(input));
+            return parse(new Input(input).parseBasicArgs());
         } catch (RuntimeException e) {
             throw new CommandException("Unable to parse input for command '" + name + "'.", e);
         }
     }
 
     public ParsedArguments parse(BasicArgs basicArgs) throws CommandException {
-        var values = new LinkedHashMap<String, Object>();
+        if (!subcommands.isEmpty()) {
+            return parseSubcommand(basicArgs);
+        }
+
+        var canonicalValues = new LinkedHashMap<String, Object>();
+        var displayValues = new LinkedHashMap<String, Object>();
         var consumedNamed = new HashSet<String>();
+        var resolvedParameters = new HashSet<Parameter<?>>();
 
         for (var parameter : parameters) {
             var matchedKey = parameter.findMatchedKey(basicArgs.named());
             if (matchedKey != null) {
-                values.put(parameter.name(), parseNamed(parameter, basicArgs.named().get(matchedKey)));
+                var parsedValue = parseNamed(parameter, basicArgs.named().get(matchedKey));
+                canonicalValues.put(parameter.name(), parsedValue);
+                displayValues.put(matchedKey, parsedValue);
                 consumedNamed.add(matchedKey);
+                resolvedParameters.add(parameter);
             }
         }
 
@@ -58,20 +71,23 @@ public final class Command {
 
         var positionalIndex = 0;
         for (var parameter : parameters) {
-            if (values.containsKey(parameter.name())) {
+            if (resolvedParameters.contains(parameter)) {
                 continue;
             }
 
             if (parameter.positional()) {
                 if (positionalIndex < basicArgs.positional().size()) {
-                    values.put(parameter.name(), parseRaw(parameter, basicArgs.positional().get(positionalIndex)));
+                    var parsedValue = parseRaw(parameter, basicArgs.positional().get(positionalIndex));
+                    canonicalValues.put(parameter.name(), parsedValue);
+                    displayValues.put(parameter.name(), parsedValue);
                     positionalIndex++;
                     continue;
                 }
             }
 
             if (parameter.hasDefaultValue()) {
-                values.put(parameter.name(), parameter.defaultValue());
+                canonicalValues.put(parameter.name(), parameter.defaultValue());
+                displayValues.put(parameter.name(), parameter.defaultValue());
             } else {
                 throw new CommandException("Missing required argument '" + parameter.name() + "' for '" + name + "'.");
             }
@@ -82,84 +98,46 @@ public final class Command {
             throw new CommandException("Too many positional arguments for '" + name + "': " + extras + ".");
         }
 
-        return new ParsedArguments(values);
+        return new ParsedArguments(canonicalValues, displayValues);
     }
 
     public static Builder builder(String name) {
         return new Builder(name);
     }
 
-    private BasicArgs tokenize(String input) {
-        var tokenizer = new Input(input);
-        var positional = new ArrayList<String>();
-        var named = new LinkedHashMap<String, String>();
-
-        while (true) {
-            switch (tokenizer.parseValue().orElse(null)) {
-                case null -> {
-                    return new BasicArgs(List.copyOf(positional), java.util.Map.copyOf(named));
-                }
-                case Input.Value.Literal(String value) -> positional.add(value);
-                case Input.Value.QuotedString(String value) -> positional.add(value);
-                case Input.Value.SingleFlag(String name) -> putNamedToken(named, name, "");
-                case Input.Value.DoubleFlag(String name) -> {
-                    var parameter = findNamedParameter(name);
-                    var checkpoint = tokenizer.checkpoint();
-                    switch (tokenizer.parseValue().orElse(null)) {
-                        case Input.Value.Literal(String value) -> {
-                            if (shouldConsumeValue(parameter, value)) {
-                                putNamedToken(named, name, value);
-                            } else {
-                                tokenizer.restore(checkpoint);
-                                putNamedToken(named, name, "");
-                            }
-                        }
-                        case Input.Value.QuotedString(String value) -> {
-                            if (shouldConsumeValue(parameter, value)) {
-                                putNamedToken(named, name, value);
-                            } else {
-                                tokenizer.restore(checkpoint);
-                                putNamedToken(named, name, "");
-                            }
-                        }
-                        case null -> putNamedToken(named, name, "");
-                        default -> {
-                            tokenizer.restore(checkpoint);
-                            putNamedToken(named, name, "");
-                        }
-                    }
-                }
-            }
+    private ParsedArguments parseSubcommand(BasicArgs basicArgs) throws CommandException {
+        if (!parameters.isEmpty()) {
+            throw new CommandException("Commands with subcommands cannot also define direct parameters.");
         }
+
+        if (basicArgs.positional().isEmpty()) {
+            throw new CommandException("Missing required subcommand for '" + name + "'.");
+        }
+
+        var selector = basicArgs.positional().get(0);
+        var subcommand = subcommands.get(selector);
+        if (subcommand == null) {
+            throw new CommandException("Unknown subcommand '" + selector + "' for '" + name + "'.");
+        }
+
+        var remainingPositionals = List.copyOf(basicArgs.positional().subList(1, basicArgs.positional().size()));
+        var subcommandArgs = subcommand.parse(new BasicArgs(remainingPositionals, basicArgs.named()));
+        return new ParsedArguments(
+            Collections.emptyMap(),
+            Collections.emptyMap(),
+            selector,
+            subcommandArgs
+        );
     }
 
     private static Object parseNamed(Parameter<?> parameter, String rawValue) throws CommandException {
         if (rawValue.isEmpty()) {
-            if (parameter.type().isBooleanType()) {
-                return parseRaw(parameter, "true");
+            if (parameter.hasConstValue()) {
+                return parameter.constValue();
             }
             throw new CommandException("Named argument '" + parameter.name() + "' is missing a value.");
         }
         return parseRaw(parameter, rawValue);
-    }
-
-    private Parameter<?> findNamedParameter(String namedKey) {
-        for (var parameter : parameters) {
-            if (parameter.namedKeys().contains(namedKey)) {
-                return parameter;
-            }
-        }
-        return null;
-    }
-
-    private static boolean shouldConsumeValue(Parameter<?> parameter, String value) {
-        if (parameter == null) {
-            return true;
-        }
-        if (!parameter.type().isBooleanType()) {
-            return true;
-        }
-        return value.equals("true") || value.equals("false");
     }
 
     private static void putNamedToken(java.util.Map<String, String> named, String name, String value) {
@@ -181,6 +159,7 @@ public final class Command {
         private final String name;
         private final List<Parameter<?>> parameters = new ArrayList<>();
         private final Set<String> namedKeys = new HashSet<>();
+        private final Map<String, Command> subcommands = new LinkedHashMap<>();
 
         private Builder(String name) {
             this.name = Objects.requireNonNull(name);
@@ -190,7 +169,22 @@ public final class Command {
             return new ParameterBuilder<>(this, name, type);
         }
 
+        public Builder addSubcommand(String subcommandName, Command command) {
+            Objects.requireNonNull(subcommandName);
+            Objects.requireNonNull(command);
+            if (!parameters.isEmpty()) {
+                throw new IllegalStateException("Cannot add subcommands after parameters have been registered.");
+            }
+            if (subcommands.putIfAbsent(subcommandName, command) != null) {
+                throw new IllegalArgumentException("Subcommand '" + subcommandName + "' is already registered.");
+            }
+            return this;
+        }
+
         private <T> Builder register(Parameter<T> parameter) {
+            if (!subcommands.isEmpty()) {
+                throw new IllegalStateException("Cannot add parameters to a command that already has subcommands.");
+            }
             for (var namedKey : parameter.namedKeys()) {
                 if (!namedKeys.add(namedKey)) {
                     throw new IllegalArgumentException("Named key '" + namedKey + "' is already registered.");
@@ -201,7 +195,7 @@ public final class Command {
         }
 
         public Command build() {
-            return new Command(name, List.copyOf(parameters));
+            return new Command(name, List.copyOf(parameters), Map.copyOf(subcommands));
         }
     }
 
@@ -214,6 +208,8 @@ public final class Command {
         private final List<String> namedKeys = new ArrayList<>();
         private boolean hasDefaultValue;
         private T defaultValue;
+        private boolean hasConstValue;
+        private T constValue;
 
         private ParameterBuilder(Builder owner, String name, ArgumentType<T> type) {
             this.owner = owner;
@@ -241,12 +237,27 @@ public final class Command {
             return this;
         }
 
+        public ParameterBuilder<T> constValue(T value) {
+            hasConstValue = true;
+            constValue = value;
+            return this;
+        }
+
         public Builder add() {
             if (!positional && namedKeys.isEmpty()) {
                 throw new IllegalStateException("Argument '" + name + "' must be positional and/or named.");
             }
             return owner.register(
-                new Parameter<>(name, type, positional, List.copyOf(namedKeys), hasDefaultValue, defaultValue)
+                new Parameter<>(
+                    name,
+                    type,
+                    positional,
+                    List.copyOf(namedKeys),
+                    hasDefaultValue,
+                    defaultValue,
+                    hasConstValue,
+                    constValue
+                )
             );
         }
     }
@@ -259,6 +270,8 @@ public final class Command {
         private final List<String> namedKeys;
         private final boolean hasDefaultValue;
         private final T defaultValue;
+        private final boolean hasConstValue;
+        private final T constValue;
 
         private Parameter(
             String name,
@@ -266,7 +279,9 @@ public final class Command {
             boolean positional,
             List<String> namedKeys,
             boolean hasDefaultValue,
-            T defaultValue
+            T defaultValue,
+            boolean hasConstValue,
+            T constValue
         ) {
             this.name = name;
             this.type = type;
@@ -274,6 +289,8 @@ public final class Command {
             this.namedKeys = namedKeys;
             this.hasDefaultValue = hasDefaultValue;
             this.defaultValue = defaultValue;
+            this.hasConstValue = hasConstValue;
+            this.constValue = constValue;
         }
 
         private String name() {
@@ -298,6 +315,14 @@ public final class Command {
 
         private T defaultValue() {
             return defaultValue;
+        }
+
+        private boolean hasConstValue() {
+            return hasConstValue;
+        }
+
+        private T constValue() {
+            return constValue;
         }
 
         private String findMatchedKey(java.util.Map<String, String> namedArguments) throws CommandException {
