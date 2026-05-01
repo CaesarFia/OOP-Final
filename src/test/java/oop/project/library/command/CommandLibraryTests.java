@@ -52,4 +52,20 @@ class CommandLibraryTests {
         Assertions.assertEquals(Map.of("term", "apple", "i", true), parsed.toMap());
     }
 
+    @Test
+    void sameParameterCannotBeProvidedThroughMultipleAliases() {
+        var search = Command.builder("search")
+            .addParameter("term", ArgumentType.string()).positional().add()
+            .addParameter("case-insensitive", ArgumentType.bool())
+                .named("case-insensitive")
+                .alias("i")
+                .constValue(true)
+                .add()
+            .build();
+
+        Assertions.assertThrows(CommandException.class, () ->
+            search.parse(" apple -i --case-insensitive true")
+        );
+    }
+
 }

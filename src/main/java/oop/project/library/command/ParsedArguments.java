@@ -4,6 +4,9 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Immutable typed parse result produced by {@link Command}.
+ */
 public final class ParsedArguments {
 
     private final Map<String, Object> canonicalValues;
@@ -27,32 +30,43 @@ public final class ParsedArguments {
         this.subcommandArguments = subcommandArguments;
     }
 
+    /**
+     * Convenience getter for integer arguments.
+     */
     public int getInt(String name) throws CommandException {
         return get(name, Integer.class);
     }
 
+    /**
+     * Convenience getter for double arguments.
+     */
     public double getDouble(String name) throws CommandException {
         return get(name, Double.class);
     }
 
+    /**
+     * Convenience getter for boolean arguments.
+     */
     public boolean getBoolean(String name) throws CommandException {
         return get(name, Boolean.class);
     }
 
+    /**
+     * Convenience getter for string arguments.
+     */
     public String getString(String name) throws CommandException {
         return get(name, String.class);
     }
 
     /**
-     * Returns the parsed value for the given argument name, cast to the expected type.
-     * Throws {@link CommandException} if no value exists for that name or if the stored
-     * value is not an instance of {@code expectedType}. Prefer the typed convenience
-     * methods ({@link #getInt}, {@link #getString}, etc.) for common types.
+     * Returns the parsed value for the given canonical argument name, cast to the expected type.
+     * Prefer the typed convenience methods ({@link #getInt}, {@link #getString}, etc.) for common
+     * types.
      *
-     * @param name the canonical parameter name as declared in the command definition
-     * @param expectedType the class to cast the stored value to
-     * @return the parsed value cast to T
-     * @throws CommandException if the argument is missing or is the wrong type
+     * @param name canonical parameter name declared on the command definition
+     * @param expectedType expected runtime class of the parsed value
+     * @return the typed parsed value
+     * @throws CommandException if the value is missing or does not match the requested type
      */
     public <T> T get(String name, Class<T> expectedType) throws CommandException {
         var value = canonicalValues.get(name);
@@ -68,6 +82,10 @@ public final class ParsedArguments {
         return expectedType.cast(value);
     }
 
+    /**
+     * Returns the presentation map used by the scenario harness, preserving the named key that
+     * appeared in input when aliases are involved.
+     */
     public Map<String, Object> toMap() {
         return displayValues;
     }
@@ -76,6 +94,9 @@ public final class ParsedArguments {
         return subcommandName != null;
     }
 
+    /**
+     * Returns the selected subcommand name when this parse result came from a command tree.
+     */
     public String getSubcommandName() throws CommandException {
         if (subcommandName == null) {
             throw new CommandException("No parsed subcommand exists.");
@@ -83,6 +104,9 @@ public final class ParsedArguments {
         return subcommandName;
     }
 
+    /**
+     * Returns the nested parsed arguments for the selected subcommand.
+     */
     public ParsedArguments getSubcommandArguments() throws CommandException {
         if (subcommandArguments == null) {
             throw new CommandException("No parsed subcommand arguments exist.");

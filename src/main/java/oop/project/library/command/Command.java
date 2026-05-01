@@ -4,6 +4,7 @@ import oop.project.library.argument.ArgumentException;
 import oop.project.library.argument.ArgumentType;
 import oop.project.library.input.BasicArgs;
 import oop.project.library.input.Input;
+import oop.project.library.input.InputException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -14,6 +15,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Reusable definition of one command's argument structure.
+ *
+ * <p>A command can either own direct parameters or dispatch to subcommands. Parsing produces a
+ * separate {@link ParsedArguments} instance so the command definition itself stays immutable.</p>
+ */
 public final class Command {
 
     private final String name;
@@ -30,14 +37,24 @@ public final class Command {
         return name;
     }
 
+    /**
+     * Parses raw command input into typed arguments for this command definition.
+     *
+     * @param input raw text containing only this command's arguments
+     * @return parsed typed argument result
+     * @throws CommandException if tokenization, validation, or command-shape resolution fails
+     */
     public ParsedArguments parse(String input) throws CommandException {
         try {
             return parse(new Input(input).parseBasicArgs());
-        } catch (RuntimeException e) {
+        } catch (InputException e) {
             throw new CommandException("Unable to parse input for command '" + name + "'.", e);
         }
     }
 
+    /**
+     * Resolves pre-tokenized arguments against this command definition.
+     */
     public ParsedArguments parse(BasicArgs basicArgs) throws CommandException {
         if (!subcommands.isEmpty()) {
             return parseSubcommand(basicArgs);
@@ -140,12 +157,6 @@ public final class Command {
         return parseRaw(parameter, rawValue);
     }
 
-    private static void putNamedToken(java.util.Map<String, String> named, String name, String value) {
-        if (named.putIfAbsent(name, value) != null) {
-            throw new RuntimeException("Duplicate named argument " + name + ".");
-        }
-    }
-
     private static Object parseRaw(Parameter<?> parameter, String rawValue) throws CommandException {
         try {
             return parameter.type().parse(parameter.name(), rawValue);
@@ -166,18 +177,21 @@ public final class Command {
         }
 
         /**
-         * Starts building a new parameter with the given name and argument type.
+         * Starts building a new typed parameter with the given canonical name.
          * Call {@link ParameterBuilder#positional()} and/or {@link ParameterBuilder#named(String)}
          * to define how the parameter binds, then call {@link ParameterBuilder#add()} to register it.
          *
-         * @param name the parameter name, used as the canonical key in parsed results
-         * @param type the argument type used to parse and validate the raw string value
-         * @return a builder for configuring this parameter
+         * @param name canonical parameter name used for typed lookup and diagnostics
+         * @param type argument type responsible for parsing and validating raw text
+         * @return a builder for configuring how this parameter binds
          */
         public <T> ParameterBuilder<T> addParameter(String name, ArgumentType<T> type) {
             return new ParameterBuilder<>(this, name, type);
         }
 
+        /**
+         * Registers a named subcommand whose remaining input is parsed by another command.
+         */
         public Builder addSubcommand(String subcommandName, Command command) {
             Objects.requireNonNull(subcommandName);
             Objects.requireNonNull(command);
@@ -227,11 +241,8 @@ public final class Command {
         }
 
         /**
-         * Marks this parameter as positional, meaning it is matched by position in
-         * the input rather than by a flag name. Positional parameters are consumed
-         * in declaration order after named arguments have been resolved.
-         *
-         * @return this builder
+         * Binds this parameter to the next unconsumed positional token. Positional parameters are
+         * consumed in declaration order after named arguments have been resolved.
          */
         public ParameterBuilder<T> positional() {
             positional = true;
@@ -239,12 +250,11 @@ public final class Command {
         }
 
         /**
-         * Registers a named key for this parameter so it can be matched by a
-         * {@code --key value} flag in the input. Multiple named keys can be added;
-         * any one of them will bind to this parameter. Use {@link #alias(String)}
-         * to add additional keys beyond the primary name.
+         * Registers a named key for this parameter so it can be matched by a flag such as
+         * {@code --key value} or {@code -key}. Multiple named keys can be added; any one of them
+         * will bind to this parameter.
          *
-         * @param namedKey the flag name to match, without the leading dashes
+         * @param namedKey the flag name to match, without leading dashes
          * @return this builder
          */
         public ParameterBuilder<T> named(String namedKey) {
@@ -252,22 +262,34 @@ public final class Command {
             return this;
         }
 
+        /**
+         * Registers an additional named key for the same parameter.
+         */
         public ParameterBuilder<T> alias(String namedKey) {
             return named(namedKey);
         }
 
+        /**
+         * Supplies a fallback value used when the parameter is omitted.
+         */
         public ParameterBuilder<T> defaultValue(T value) {
             hasDefaultValue = true;
             defaultValue = value;
             return this;
         }
 
+        /**
+         * Supplies the value used when a named parameter is present without an explicit value.
+         */
         public ParameterBuilder<T> constValue(T value) {
             hasConstValue = true;
             constValue = value;
             return this;
         }
 
+        /**
+         * Finalizes this parameter and registers it on the owning command.
+         */
         public Builder add() {
             if (!positional && namedKeys.isEmpty()) {
                 throw new IllegalStateException("Argument '" + name + "' must be positional and/or named.");

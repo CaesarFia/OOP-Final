@@ -1,6 +1,7 @@
 package oop.project.library.scenarios;
 
 import oop.project.library.input.Input;
+import oop.project.library.input.InputException;
 
 import java.util.Map;
 
@@ -30,7 +31,7 @@ public final class Scenarios {
     private static Map<String, Object> input(String arguments) {
         try {
             return Map.of("arguments", new Input(arguments).parseBasicArgs());
-        } catch (RuntimeException e) {
+        } catch (InputException e) {
             throw new RuntimeException("Invalid input: " + e.getMessage(), e);
         }
     }
