@@ -1,8 +1,10 @@
 # OOP Project Library
 
-A library for building commands and parsing typed arguments from string input. There are two main systems that work together: the Argument System handles converting raw string values into typed data, and the Command System handles the structure of commands and how arguments get bound to them.
+A library for building commands and parsing typed arguments from string input. The code is split into three layers:
 
----
+- `oop.project.library.input`: tokenizes raw command text into positional and named arguments
+- `oop.project.library.argument`: parses a single raw value into a typed result and applies reusable validators
+- `oop.project.library.command`: defines full command structures, resolves arguments, and exposes typed extraction
 
 ## Beginner's Guide
 
@@ -23,12 +25,10 @@ You can also add validation on top of a type:
 ArgumentType.integer().validate(Validators.range(1, 10))
 
 // only accept specific string choices
-ArgumentType.string().validate(Validators.choices("easy", "normal", "hard"))
+ArgumentType.string().validate(Validators.choices(List.of("easy", "normal", "hard")))
 ```
 
 If parsing or validation fails, an `ArgumentException` is thrown with a message describing what went wrong.
-
----
 
 ### Command System
 
@@ -111,13 +111,23 @@ result.get("name", SomeClass.class) // generic version
 
 If the argument doesn't exist or is the wrong type, a `CommandException` is thrown.
 
----
+## Error Model
+
+The library uses checked exceptions for the core parsing pipeline:
+
+- `InputException`: invalid raw command text such as duplicate named keys, unterminated quotes, or a missing value after a double flag
+- `ArgumentException`: invalid individual values or failed validation
+- `CommandException`: invalid command usage such as missing required arguments, unknown named keys, or subcommand mismatches
+
+The provided `scenarios` package wraps those checked failures in `RuntimeException` because the course scenario harness expects scenario methods to fail from within the scenario layer.
 
 ## Feature Showcase
 
-### Command System: Constant-value flags
+The required MVP already supports typed positional and named arguments, defaults, custom parsing, and typed extraction. The showcase features in this submission are subcommand-aware parsing with typed nested results and const-value flags for boolean-style switches.
 
-One thing that's kind of annoying in argparse4j is handling boolean flags where you don't want the user to type `--verbose true`, you just want `--verbose` by itself to mean true when present and false when not. In argparse4j you need a separate `store_true` action type to do this cleanly.
+### Showcase 1: Constant-value flags
+
+One thing that is awkward in `argparse4j` is handling boolean flags where you do not want the user to type `--verbose true`; you just want `--verbose` by itself to mean true when present and false when absent.
 
 In this library you can use `.constValue()` on any named parameter. When the argument appears in the input but has no value following it, it uses the const value instead of trying to parse one.
 
@@ -126,15 +136,58 @@ Command search = Command.builder("search")
     .addParameter("term", ArgumentType.string()).positional().add()
     .addParameter("case-insensitive", ArgumentType.bool())
         .named("case-insensitive")
-        .constValue(true)    // used when flag is present with no value
-        .defaultValue(false) // used when flag is absent entirely
+        .constValue(true)
+        .defaultValue(false)
         .add()
     .build();
 
-// all three of these work:
 search.parse("apple");                          // case-insensitive = false
 search.parse("apple --case-insensitive");       // case-insensitive = true
 search.parse("apple --case-insensitive true");  // case-insensitive = true
 ```
 
-This keeps the flag behavior out of the type system. `ArgumentType.bool()` still does what it normally does when a value is provided, but you get the convenience of value-less flag usage without needing a special action type.
+This keeps flag behavior out of the type system. `ArgumentType.bool()` still behaves normally when a value is provided, but you still get ergonomic no-value flag usage.
+
+### Showcase 2: Subcommands with different typed shapes
+
+The `dispatch` scenario demonstrates one command name branching into different typed argument structures:
+
+```text
+dispatch static 1
+=> {type=static, value=1}
+
+dispatch dynamic one
+=> {type=dynamic, value=one}
+```
+
+`static` and `dynamic` are parsed as true subcommands, not as ad hoc strings checked later in scenario code. Each branch gets its own command definition and its own typed extraction path.
+
+## Scenario Coverage
+
+Scenario examples implemented in `src/main/java/oop/project/library/scenarios` include:
+
+- `difficulty easy`
+  Demonstrates enum parsing with case-insensitive matching.
+- `date 2024-10-23`
+  Demonstrates `ArgumentType.custom(...)` with typed extraction as `LocalDate`.
+- `search ApPlE --i true`
+  Demonstrates alias support while preserving the actual alias used in the scenario output map.
+- `dispatch static 1`
+  Demonstrates subcommand parsing and nested typed results.
+
+Focused tests for the library API live in:
+
+- `src/test/java/oop/project/library/argument/ArgumentLibraryTests.java`
+- `src/test/java/oop/project/library/command/CommandLibraryTests.java`
+- `src/test/java/oop/project/library/input/InputTests.java`
+
+## Running
+
+```bash
+bash gradlew test
+```
+
+Additional design-review notes for the argument and command subsystems are in:
+
+- `src/main/java/oop/project/library/argument/README.md`
+- `src/main/java/oop/project/library/command/README.md`
