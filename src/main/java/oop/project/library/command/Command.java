@@ -165,6 +165,15 @@ public final class Command {
             this.name = Objects.requireNonNull(name);
         }
 
+        /**
+         * Starts building a new parameter with the given name and argument type.
+         * Call {@link ParameterBuilder#positional()} and/or {@link ParameterBuilder#named(String)}
+         * to define how the parameter binds, then call {@link ParameterBuilder#add()} to register it.
+         *
+         * @param name the parameter name, used as the canonical key in parsed results
+         * @param type the argument type used to parse and validate the raw string value
+         * @return a builder for configuring this parameter
+         */
         public <T> ParameterBuilder<T> addParameter(String name, ArgumentType<T> type) {
             return new ParameterBuilder<>(this, name, type);
         }
@@ -217,11 +226,27 @@ public final class Command {
             this.type = Objects.requireNonNull(type);
         }
 
+        /**
+         * Marks this parameter as positional, meaning it is matched by position in
+         * the input rather than by a flag name. Positional parameters are consumed
+         * in declaration order after named arguments have been resolved.
+         *
+         * @return this builder
+         */
         public ParameterBuilder<T> positional() {
             positional = true;
             return this;
         }
 
+        /**
+         * Registers a named key for this parameter so it can be matched by a
+         * {@code --key value} flag in the input. Multiple named keys can be added;
+         * any one of them will bind to this parameter. Use {@link #alias(String)}
+         * to add additional keys beyond the primary name.
+         *
+         * @param namedKey the flag name to match, without the leading dashes
+         * @return this builder
+         */
         public ParameterBuilder<T> named(String namedKey) {
             namedKeys.add(Objects.requireNonNull(namedKey));
             return this;
